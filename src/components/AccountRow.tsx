@@ -81,23 +81,23 @@ export function AccountRow({ channel, isSelected, onSelect, onDelete }: AccountR
           <img 
             src={channel.avatar} 
             alt={channel.name} 
-            className="h-11 w-11 sm:h-12 sm:w-12 rounded-full object-cover border border-border/50 shrink-0 shadow-sm"
+            className="h-11 w-11 rounded-full object-cover border border-border/50 shrink-0 shadow-sm"
           />
           <div className="flex flex-col min-w-0">
-            <h3 className="font-bold text-foreground tracking-tight text-[15px] sm:text-base truncate">{channel.name}</h3>
-            <span className="text-[11px] sm:text-[12px] text-primary font-bold truncate">@{channel.handle.replace('@', '')}</span>
+            <h3 className="font-bold text-foreground tracking-tight text-[15px] truncate">{channel.name}</h3>
+            <span className="text-[11px] text-primary font-bold truncate">@{channel.handle.replace('@', '')}</span>
             
-            {/* Mobile Stats - Enhanced prominence */}
-            <div className="flex gap-5 mt-1.5 md:hidden">
-              <div className="flex flex-col">
-                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter leading-none mb-1">Followers</span>
-                <span className="text-sm font-black text-foreground leading-none">{formatNumber(stats.totalFollowers)}</span>
+            {/* Mobile Quick Stats - Collapsed view only */}
+            {!isExpanded && (
+              <div className="flex gap-4 mt-1 md:hidden">
+                <span className="text-[10px] font-bold text-muted-foreground">
+                  <span className="text-foreground">{formatNumber(stats.totalFollowers)}</span> F
+                </span>
+                <span className="text-[10px] font-bold text-muted-foreground">
+                  <span className="text-foreground">{formatNumber(stats.totalLikes)}</span> L
+                </span>
               </div>
-              <div className="flex flex-col">
-                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter leading-none mb-1">Likes</span>
-                <span className="text-sm font-black text-foreground leading-none">{formatNumber(stats.totalLikes)}</span>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -109,33 +109,12 @@ export function AccountRow({ channel, isSelected, onSelect, onDelete }: AccountR
           <StatMini label={t("account.videos")} value={formatNumber(stats.totalVideos)} />
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {/* Action Icons - Always visible or visible on mobile for easier access */}
-          <button
-            onClick={handleDelete}
-            className="flex md:hidden lg:group-hover:flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all"
-            title={t("account.delete")}
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-
-
-          <div className="flex items-center gap-3">
-            {channel.tiktok_created_at && !isExpanded && (
-              <span className="hidden xl:flex items-center gap-1 text-[10px] text-muted-foreground bg-secondary/30 px-2 py-0.5 rounded-full border border-border/20">
-                <Calendar className="h-3 w-3" /> {
-                  channel.tiktok_created_at.includes("-") 
-                    ? new Date(channel.tiktok_created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                    : channel.tiktok_created_at
-                }
-              </span>
-            )}
-            <div className={cn(
-              "flex h-7 w-7 items-center justify-center rounded-full bg-secondary/40 transition-transform duration-300",
-              isExpanded ? "rotate-180 text-primary" : "text-muted-foreground"
-            )}>
-              <ChevronDown className="h-4 w-4" />
-            </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className={cn(
+            "flex h-8 w-8 items-center justify-center rounded-full bg-secondary/40 transition-transform duration-300",
+            isExpanded ? "rotate-180 text-primary bg-primary/10" : "text-muted-foreground"
+          )}>
+            <ChevronDown className="h-4 w-4" />
           </div>
         </div>
       </div>
@@ -149,49 +128,55 @@ export function AccountRow({ channel, isSelected, onSelect, onDelete }: AccountR
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
           >
-            <div className="border-t border-border/30 bg-secondary/10 p-5">
+            <div className="border-t border-border/30 bg-secondary/5 p-4 sm:p-5">
               {isDetailLoading ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-3">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary/50" />
-                  <p className="text-xs font-medium text-muted-foreground animate-pulse">{t("app.preparing")}...</p>
+                <div className="flex flex-col items-center justify-center py-8 gap-3">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary/50" />
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{t("app.preparing")}...</p>
                 </div>
               ) : (
-                <>
-                  <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-6">
+                <div className="space-y-6">
+                  {/* Stats Grid for Mobile (Expanded) */}
+                  <div className="grid grid-cols-2 gap-3 md:hidden">
+                    <div className="rounded-xl bg-card/40 border border-border/40 p-3">
+                      <p className="text-[9px] font-black text-muted-foreground uppercase mb-1">Followers</p>
+                      <p className="text-lg font-black text-foreground">{formatNumber(stats.totalFollowers)}</p>
+                    </div>
+                    <div className="rounded-xl bg-card/40 border border-border/40 p-3">
+                      <p className="text-[9px] font-black text-muted-foreground uppercase mb-1">Likes</p>
+                      <p className="text-lg font-black text-foreground">{formatNumber(stats.totalLikes)}</p>
+                    </div>
+                    <div className="rounded-xl bg-card/40 border border-border/40 p-3">
+                      <p className="text-[9px] font-black text-muted-foreground uppercase mb-1">Views</p>
+                      <p className="text-lg font-black text-foreground">{formatNumber(stats.totalViews)}</p>
+                    </div>
+                    <div className="rounded-xl bg-card/40 border border-border/40 p-3">
+                      <p className="text-[9px] font-black text-muted-foreground uppercase mb-1">Videos</p>
+                      <p className="text-lg font-black text-foreground">{formatNumber(stats.totalVideos)}</p>
+                    </div>
+                  </div>
 
-                  <div className="hidden md:block">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Ngày đăng đầu tiên</p>
-                    <span className="text-xs font-semibold text-foreground">
-                      {detailedData && detailedData.recentVideos.length > 0 
-                        ? [...detailedData.recentVideos].sort((a, b) => new Date(a.postedAt).getTime() - new Date(b.postedAt).getTime())[0].postedAt
-                        : t("app.preparing")}
-                    </span>
+                  <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+                    <div className="flex items-center gap-4">
+                      <button
+                        onClick={handleDelete}
+                        className="flex items-center gap-2 text-xs font-bold text-destructive hover:opacity-80 transition-opacity"
+                      >
+                        <Trash2 className="h-4 w-4" /> {t("bulk.delete")}
+                      </button>
+                      <a 
+                        href={`https://www.tiktok.com/${channel.handle}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-xs font-bold text-primary hover:opacity-80 transition-opacity"
+                      >
+                        {t("account.viewOnTikTok")} <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-4">
-                   <button
-                     onClick={handleDelete}
-                     className="flex items-center gap-2 text-xs font-semibold text-destructive hover:opacity-80 transition-opacity"
-                   >
-                     <Trash2 className="h-3.5 w-3.5" /> {t("bulk.delete")}
-                   </button>
-                   <a 
-                     href={`https://www.tiktok.com/${channel.handle}`}
-                     target="_blank"
-                     rel="noopener noreferrer"
-                     className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:opacity-80 transition-opacity"
-                   >
-                     {t("account.viewOnTikTok")} <ExternalLink className="h-3 w-3" />
-                   </a>
-                </div>
-              </div>
-              
-              {/* Removed Performance Cards Section */}
-            </>
-          )}
-        </div>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
