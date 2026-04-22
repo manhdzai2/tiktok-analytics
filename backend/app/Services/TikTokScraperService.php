@@ -82,7 +82,7 @@ class TikTokScraperService
         $username = trim($username, '/');
 
         try {
-            // 1. Lấy thông tin user
+            Log::info("Starting RapidAPI scrape for: {$username}");
             $response = $this->client->get("https://{$apiHost}/api/user/info?uniqueId={$username}", [
                 'headers' => [
                     'X-RapidAPI-Key' => $apiKey,
@@ -90,23 +90,34 @@ class TikTokScraperService
                 ],
                 'timeout' => 30.0
             ]);
-            $userData = json_decode($response->getBody(), true);
+            
+            $body = $response->getBody()->getContents();
+            Log::info("RapidAPI Response: " . substr($body, 0, 500));
+            $userData = json_decode($body, true);
             
             // Xử lý các cấu trúc JSON khác nhau của API
             $userInfo = $userData['data'] ?? $userData['userInfo'] ?? $userData ?? null;
-            if (!$userInfo || (!isset($userInfo['user']) && !isset($userInfo['uniqueId']))) return null;
+            if (!$userInfo || (!isset($userInfo['user']) && !isset($userInfo['uniqueId']))) {
+                Log::error("RapidAPI: Could not find user info in response.");
+                return null;
+            }
             
-            // Nếu data phẳng (không nằm trong ['user']), ta bọc lại cho đúng cấu trúc parseProfile
+            // Nếu data phẳng, bọc lại
             if (!isset($userInfo['user']) && isset($userInfo['uniqueId'])) {
                 $userInfo = ['user' => $userInfo, 'stats' => $userData['stats'] ?? $userData['data']['stats'] ?? []];
             }
             
-            $secUid = $userInfo['user']['secUid'] ?? $userData['data']['user']['secUid'] ?? $userData['secUid'] ?? null;
+            $secUid = $userInfo['user']['secUid'] ?? 
+                      $userInfo['user']['sec_uid'] ?? 
+                      $userData['data']['user']['secUid'] ?? 
+                      $userData['data']['user']['sec_uid'] ?? 
+                      $userData['secUid'] ?? null;
             
+            Log::info("RapidAPI: Detected secUid: " . ($secUid ?? 'NULL'));
+
             // 2. Lấy danh sách video (nếu có secUid)
             $videos = [];
             if ($secUid) {
-                Log::info("Fetching videos for secUid: {$secUid}");
                 $postResponse = $this->client->get("https://{$apiHost}/api/user/posts?secUid={$secUid}&count=35&cursor=0", [
                     'headers' => [
                         'X-RapidAPI-Key' => $apiKey,
@@ -115,9 +126,8 @@ class TikTokScraperService
                     'timeout' => 30.0
                 ]);
                 $postData = json_decode($postResponse->getBody(), true);
-                
-                // Thử nhiều đường dẫn dữ liệu video khác nhau
                 $videos = $postData['data']['itemList'] ?? $postData['itemList'] ?? $postData['aweme_list'] ?? $postData['data']['videos'] ?? $postData['videos'] ?? [];
+                Log::info("RapidAPI: Fetched " . count($videos) . " videos.");
             }
 
             return [
