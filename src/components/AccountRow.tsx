@@ -77,19 +77,29 @@ export function AccountRow({ channel, isSelected, onSelect, onDelete }: AccountR
           />
         </div>
 
-        <div className="flex items-center gap-3 min-w-[200px]">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           <img 
             src={channel.avatar} 
             alt={channel.name} 
-            className="h-10 w-10 rounded-full object-cover border border-border/50"
+            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full object-cover border border-border/50 shrink-0"
           />
-          <div className="flex flex-col">
-            <h3 className="font-semibold text-foreground tracking-tight text-sm leading-none">{channel.name}</h3>
-            <span className="text-[11px] text-primary font-medium mt-1">{channel.handle}</span>
+          <div className="flex flex-col min-w-0">
+            <h3 className="font-semibold text-foreground tracking-tight text-sm sm:text-base truncate">{channel.name}</h3>
+            <span className="text-[10px] sm:text-[11px] text-primary font-medium truncate">{channel.handle}</span>
+            
+            {/* Mobile Stats - Only visible on small screens */}
+            <div className="flex gap-3 mt-1 md:hidden">
+              <span className="text-[10px] text-muted-foreground">
+                <span className="font-bold text-foreground/80">{formatNumber(stats.totalFollowers)}</span> Follows
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                <span className="font-bold text-foreground/80">{formatNumber(stats.totalLikes)}</span> Likes
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Stats Grid - High Density Summary */}
+        {/* Stats Grid - Desktop Only */}
         <div className="hidden md:flex flex-1 justify-around gap-1 px-4">
           <StatMini label={t("account.followers")} value={formatNumber(stats.totalFollowers)} />
           <StatMini label={t("account.likes")} value={formatNumber(stats.totalLikes)} />
@@ -97,15 +107,16 @@ export function AccountRow({ channel, isSelected, onSelect, onDelete }: AccountR
           <StatMini label={t("account.videos")} value={formatNumber(stats.totalVideos)} />
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Action Icons */}
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {/* Action Icons - Always visible or visible on mobile for easier access */}
           <button
             onClick={handleDelete}
-            className="hidden group-hover:flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all"
+            className="flex md:hidden lg:group-hover:flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all"
             title={t("account.delete")}
           >
             <Trash2 className="h-4 w-4" />
           </button>
+
 
           <div className="flex items-center gap-3">
             {channel.tiktok_created_at && !isExpanded && (

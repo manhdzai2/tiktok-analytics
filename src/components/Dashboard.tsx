@@ -137,47 +137,51 @@ export function Dashboard() {
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 pb-32">
         {/* Compact Management Header */}
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between px-2">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Users className="h-4.5 w-4.5" />
+        <div className="mb-6 flex flex-col gap-4 px-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center justify-between sm:justify-start gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Users className="h-5 w-5" />
+                </div>
+                <h1 className="text-xl sm:text-2xl font-extrabold tracking-tighter text-foreground">{t("dashboard.title")}</h1>
               </div>
-              <h1 className="text-2xl font-extrabold tracking-tighter text-foreground">{t("dashboard.title")}</h1>
+
+              {channels.length > 0 && (
+                <button
+                  onClick={handleSelectAll}
+                  className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <CheckSquare className={cn(
+                    "h-4 w-4",
+                    selectedIds.length === filteredChannels.length && selectedIds.length > 0 ? "text-primary" : "text-muted-foreground/40"
+                  )} />
+                  <span className="hidden xs:inline">{t("bulk.selectAll")}</span>
+                </button>
+              )}
             </div>
 
-            {channels.length > 0 && (
+            <div className="flex gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder={t("dashboard.search")}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-border/40 bg-secondary/20 pl-9 pr-4 text-sm focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all"
+                />
+              </div>
+
               <button
-                onClick={handleSelectAll}
-                className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => setIsBulkImportOpen(true)}
+                className="flex h-10 items-center justify-center gap-2 rounded-xl bg-secondary/40 px-4 text-xs font-bold text-foreground hover:bg-secondary/60 transition-all active:scale-95 whitespace-nowrap"
               >
-                <CheckSquare className={cn(
-                  "h-4 w-4",
-                  selectedIds.length === filteredChannels.length && selectedIds.length > 0 ? "text-primary" : "text-muted-foreground/40"
-                )} />
-                {t("bulk.selectAll")}
+                <Upload className="h-4 w-4" />
+                <span className="hidden sm:inline">{t("bulk.import")}</span>
               </button>
-            )}
+            </div>
           </div>
-
-          <div className="relative w-full md:w-72">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder={t("dashboard.search")}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 w-full rounded-xl border border-border/40 bg-secondary/20 pl-9 pr-4 text-sm focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all"
-            />
-          </div>
-
-          <button
-            onClick={() => setIsBulkImportOpen(true)}
-            className="flex h-9 items-center gap-2 rounded-xl bg-secondary/40 px-4 text-xs font-bold text-foreground hover:bg-secondary/60 transition-all active:scale-95"
-          >
-            <Upload className="h-3.5 w-3.5" />
-            {t("bulk.import")}
-          </button>
         </div>
 
         {/* Account List Area */}

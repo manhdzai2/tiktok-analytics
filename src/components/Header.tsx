@@ -55,10 +55,10 @@ export function Header({ onImport, isImporting }: HeaderProps) {
         </div>
 
         {/* Search/Import Bar */}
-        <div className="flex flex-1 items-center justify-center px-4 max-w-xl">
+        <div className="flex flex-1 items-center justify-center px-2 sm:px-4 max-w-xl">
           <form onSubmit={handleImportSubmit} className="relative w-full">
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-              <Link2 className="h-4 w-4 text-muted-foreground" />
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5">
+              <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
             <input
               type="text"
@@ -67,7 +67,7 @@ export function Header({ onImport, isImporting }: HeaderProps) {
               placeholder={t("header.placeholder")}
               disabled={isImporting}
               className={cn(
-                "h-10 w-full rounded-2xl border border-border bg-secondary/30 pl-10 pr-12 text-sm",
+                "h-9 w-full rounded-xl border border-border bg-secondary/30 pl-8 pr-10 text-[13px]",
                 "transition-smooth focus:border-primary/50 focus:bg-card focus:outline-none focus:ring-2 focus:ring-ring/10",
                 "disabled:opacity-50"
               )}
@@ -75,12 +75,12 @@ export function Header({ onImport, isImporting }: HeaderProps) {
             <button
               type="submit"
               disabled={isImporting || !importUrl.trim()}
-              className="absolute right-1.5 top-1.5 flex h-7 items-center gap-1 rounded-xl bg-primary px-3 text-xs font-medium text-primary-foreground shadow-sm transition-smooth hover:bg-primary/90 disabled:opacity-50"
+              className="absolute right-1 top-1 flex h-7 items-center justify-center gap-1 rounded-lg bg-primary px-2 sm:px-3 text-xs font-medium text-primary-foreground shadow-sm transition-smooth hover:bg-primary/90 disabled:opacity-50"
             >
               {isImporting ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
               ) : (
-                <Plus className="h-3 w-3" />
+                <Plus className="h-4 w-4 sm:h-3 sm:w-3" />
               )}
               <span className="hidden sm:inline">{t("header.add")}</span>
             </button>
