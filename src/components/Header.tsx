@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, BarChart3, Moon, Sun, Languages, Link2, Loader2, Plus } from "lucide-react";
+import { Moon, Sun, Languages, Link2, Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/context/ThemeContext";
 import { useI18n } from "@/context/I18nContext";
@@ -13,22 +13,24 @@ interface HeaderProps {
   isImporting?: boolean;
 }
 
-export function Header({ channels, selectedChannel, onChannelChange, onImport, isImporting }: HeaderProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function Header({ onImport, isImporting }: HeaderProps) {
+  // const [isOpen, setIsOpen] = useState(false);
   const [importUrl, setImportUrl] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { theme, toggleTheme } = useTheme();
   const { locale, setLocale, t } = useI18n();
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
+/*
+    useEffect(() => {
+      function handleClickOutside(e: MouseEvent) {
+        if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+          // setIsOpen(false);
+        }
       }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+    */
 
   const handleImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

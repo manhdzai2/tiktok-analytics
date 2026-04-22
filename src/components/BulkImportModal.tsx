@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { X, Upload, FileText, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { bulkImportTikTok, getImportStatus } from "@/lib/api";
 import { useI18n } from "@/context/I18nContext";
 import { cn } from "@/lib/utils";
@@ -12,7 +12,7 @@ interface BulkImportModalProps {
 }
 
 export function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImportModalProps) {
-  const { t } = useI18n();
+  // const { t } = useI18n();
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [importId, setImportId] = useState<string | null>(null);
@@ -64,7 +64,7 @@ export function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImportModalP
   const prevProcessedCount = useRef(0);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: any;
 
     if (isPolling && importId) {
       interval = setInterval(async () => {

@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
-import { ChevronDown, Heart, Users, Video, Eye, ExternalLink, Calendar, TrendingUp, Trash2, Loader2 } from "lucide-react";
+import { ChevronDown, ExternalLink, Calendar, Trash2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import type { ChannelData } from "@/data/mockData";
-import { VideoGrid } from "./VideoGrid";
+
 import { useI18n } from "@/context/I18nContext";
 import { getChannelDetail } from "@/lib/api";
 
@@ -44,15 +44,7 @@ export function AccountRow({ channel, isSelected, onSelect, onDelete }: AccountR
   };
 
   const stats = channel?.stats || { totalLikes: 0, totalFollowers: 0, totalVideos: 0, totalViews: 0, likesChange: 0, followersChange: 0, videosChange: 0, viewsChange: 0 };
-  const activeStats = detailedData?.stats || stats;
 
-  // Calculate top videos
-  const topVideos = useMemo(() => {
-    const videos = detailedData?.recentVideos || channel?.recentVideos || [];
-    return [...videos]
-      .sort((a, b) => (b.views || 0) - (a.views || 0))
-      .slice(0, 6);
-  }, [channel?.recentVideos, detailedData]);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -206,11 +198,4 @@ function StatMini({ label, value, highlight }: { label: string, value: string, h
   );
 }
 
-function DetailBox({ label, value }: { label: string, value: string }) {
-  return (
-    <div className="rounded-xl bg-card/40 p-3 border border-border/20">
-      <p className="text-[9px] font-bold uppercase tracking-tight text-muted-foreground mb-1">{label}</p>
-      <p className="text-base font-bold text-foreground leading-tight">{value}</p>
-    </div>
-  );
-}
+
