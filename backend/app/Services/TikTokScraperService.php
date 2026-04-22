@@ -92,23 +92,22 @@ class TikTokScraperService
             ]);
             $userData = json_decode($response->getBody(), true);
             
-            if (isset($userData['message'])) {
-                Log::error("RapidAPI Message: " . $userData['message']);
-                if (str_contains(strtolower($userData['message']), 'subscribed')) {
-                    throw new \Exception("Vui lòng ấn nút 'Subscribe to test' trên RapidAPI để kích hoạt gói Free.");
-                }
+            // Xử lý các cấu trúc JSON khác nhau của API
+            $userInfo = $userData['data'] ?? $userData['userInfo'] ?? $userData ?? null;
+            if (!$userInfo || (!isset($userInfo['user']) && !isset($userInfo['uniqueId']))) return null;
+            
+            // Nếu data phẳng (không nằm trong ['user']), ta bọc lại cho đúng cấu trúc parseProfile
+            if (!isset($userInfo['user']) && isset($userInfo['uniqueId'])) {
+                $userInfo = ['user' => $userInfo, 'stats' => $userData['stats'] ?? $userData['data']['stats'] ?? []];
             }
             
-            $userInfo = $userData['userInfo'] ?? $userData['data'] ?? $userData ?? null;
-            if (!$userInfo || !isset($userInfo['user'])) return null;
-            
-            $secUid = $userInfo['user']['secUid'] ?? $userData['secUid'] ?? null;
+            $secUid = $userInfo['user']['secUid'] ?? $userData['data']['user']['secUid'] ?? $userData['secUid'] ?? null;
             
             // 2. Lấy danh sách video (nếu có secUid)
             $videos = [];
             if ($secUid) {
                 Log::info("Fetching videos for secUid: {$secUid}");
-                $postResponse = $this->client->get("https://{$apiHost}/api/user/posts?secUid={$secUid}&count=30&cursor=0", [
+                $postResponse = $this->client->get("https://{$apiHost}/api/user/posts?secUid={$secUid}&count=35&cursor=0", [
                     'headers' => [
                         'X-RapidAPI-Key' => $apiKey,
                         'X-RapidAPI-Host' => $apiHost
@@ -116,7 +115,9 @@ class TikTokScraperService
                     'timeout' => 30.0
                 ]);
                 $postData = json_decode($postResponse->getBody(), true);
-                $videos = $postData['itemList'] ?? $postData['data']['itemList'] ?? $postData['aweme_list'] ?? $postData['data']['videos'] ?? [];
+                
+                // Thử nhiều đường dẫn dữ liệu video khác nhau
+                $videos = $postData['data']['itemList'] ?? $postData['itemList'] ?? $postData['aweme_list'] ?? $postData['data']['videos'] ?? $postData['videos'] ?? [];
             }
 
             return [
@@ -214,12 +215,19 @@ class TikTokScraperService
         
         $followersChange = 0;
         $viewsChange = 0;
-        $totalViews = (int) ($stats['playCount'] ?? 0);
+        
+        // Thử nhiều trường hợp tên stats khác nhau
+        $followerCount = (int) ($stats['followerCount'] ?? $stats['followers'] ?? $user['followerCount'] ?? 0);
+        $heartCount = (int) ($stats['heartCount'] ?? $stats['heart'] ?? $stats['likes'] ?? 0);
+        $videoCount = (int) ($stats['videoCount'] ?? $stats['video_count'] ?? $stats['video'] ?? 0);
+        $playCount = (int) ($stats['playCount'] ?? $stats['play_count'] ?? $stats['views'] ?? 0);
+
+        $totalViews = $playCount;
 
         if ($channel) {
             $lastGrowth = $channel->dailyGrowths()->where('date', '!=', date('M d'))->orderBy('created_at', 'desc')->first();
             if ($lastGrowth) {
-                $followersChange = max(0, ($stats['followerCount'] ?? 0) - $lastGrowth->followers);
+                $followersChange = max(0, $followerCount - $lastGrowth->followers);
                 if ($totalViews > 0) $viewsChange = max(0, $totalViews - $lastGrowth->views);
             }
         }
@@ -227,12 +235,12 @@ class TikTokScraperService
         $channel = Channel::updateOrCreate(
             ['handle' => $handle],
             [
-                'id' => $user['id'] ?? 'ch-' . time(),
+                'id' => $user['id'] ?? $user['uid'] ?? 'ch-' . time(),
                 'name' => $user['nickname'] ?? $user['uniqueId'],
-                'avatar' => $user['avatarLarger'] ?? $user['avatarMedium'] ?? null,
-                'total_likes' => $stats['heartCount'] ?? $stats['heart'] ?? 0,
-                'total_followers' => $stats['followerCount'] ?? 0,
-                'total_videos' => $stats['videoCount'] ?? 0,
+                'avatar' => $user['avatarLarger'] ?? $user['avatarMedium'] ?? $user['avatar_thumb'] ?? null,
+                'total_likes' => $heartCount,
+                'total_followers' => $followerCount,
+                'total_videos' => $videoCount,
                 'total_views' => $totalViews > 0 ? $totalViews : ($channel->total_views ?? rand(100000, 1000000)),
                 'tiktok_created_at' => isset($user['createTime']) ? date('Y-m-d', $user['createTime']) : ($channel->tiktok_created_at ?? null),
                 'followers_change' => $followersChange > 0 ? $followersChange : rand(5, 20), 
