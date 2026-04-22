@@ -5,8 +5,8 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\ChannelController;
 
+Route::post('/bulk-action/import-channels', [ChannelController::class, 'bulkImport']);
 Route::get('/channels', [ChannelController::class, 'index']);
-Route::post('/channels/bulk-import', [ChannelController::class, 'bulkImport']);
 Route::get('/imports/{id}', [ChannelController::class, 'getImportStatus']);
 Route::get('/channels/{id}', [ChannelController::class, 'show']);
 Route::delete('/channels/{id}', [ChannelController::class, 'destroy']);

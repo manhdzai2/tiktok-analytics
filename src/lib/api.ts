@@ -28,7 +28,7 @@ export const importTikTok = async (url: string) => {
 export const bulkImportTikTok = async (file: File) => {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await api.post('/channels/bulk-import', formData, {
+  const response = await api.post('/bulk-action/import-channels', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
