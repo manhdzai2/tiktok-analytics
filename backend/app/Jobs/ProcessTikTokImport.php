@@ -100,14 +100,24 @@ class ProcessTikTokImport implements ShouldQueue
     protected function readLinksFromExcel($path)
     {
         $scriptPath = base_path('scraper-tool/read-excel.js');
+        // Log đường dẫn để kiểm tra
+        Log::info("Attempting to read Excel", ['script' => $scriptPath, 'file' => $path]);
+        
         $command = "node \"$scriptPath\" \"$path\" 2>&1";
         $output = shell_exec($command);
         
+        Log::info("Excel Parser Output", ['output' => $output]);
+
         $data = json_decode($output, true);
         if (!$data || !isset($data['success'])) {
-            throw new \Exception("Failed to parse Excel file: " . ($data['error'] ?? $output));
+            $errorMsg = $data['error'] ?? ($output ?: "Unknown shell error (maybe node is not installed?)");
+            Log::error("Excel Parsing Failed", ['error' => $errorMsg]);
+            throw new \Exception("Failed to parse Excel file: " . $errorMsg);
         }
         
-        return $data['links'] ?? [];
+        $links = $data['links'] ?? [];
+        Log::info("Excel Links Found", ['count' => count($links)]);
+        
+        return $links;
     }
 }
