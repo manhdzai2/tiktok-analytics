@@ -81,20 +81,22 @@ export function AccountRow({ channel, isSelected, onSelect, onDelete }: AccountR
           <img 
             src={channel.avatar} 
             alt={channel.name} 
-            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full object-cover border border-border/50 shrink-0"
+            className="h-11 w-11 sm:h-12 sm:w-12 rounded-full object-cover border border-border/50 shrink-0 shadow-sm"
           />
           <div className="flex flex-col min-w-0">
-            <h3 className="font-semibold text-foreground tracking-tight text-sm sm:text-base truncate">{channel.name}</h3>
-            <span className="text-[10px] sm:text-[11px] text-primary font-medium truncate">{channel.handle}</span>
+            <h3 className="font-bold text-foreground tracking-tight text-[15px] sm:text-base truncate">{channel.name}</h3>
+            <span className="text-[11px] sm:text-[12px] text-primary font-bold truncate">@{channel.handle.replace('@', '')}</span>
             
-            {/* Mobile Stats - Only visible on small screens */}
-            <div className="flex gap-3 mt-1 md:hidden">
-              <span className="text-[10px] text-muted-foreground">
-                <span className="font-bold text-foreground/80">{formatNumber(stats.totalFollowers)}</span> Follows
-              </span>
-              <span className="text-[10px] text-muted-foreground">
-                <span className="font-bold text-foreground/80">{formatNumber(stats.totalLikes)}</span> Likes
-              </span>
+            {/* Mobile Stats - Enhanced prominence */}
+            <div className="flex gap-5 mt-1.5 md:hidden">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter leading-none mb-1">Followers</span>
+                <span className="text-sm font-black text-foreground leading-none">{formatNumber(stats.totalFollowers)}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter leading-none mb-1">Likes</span>
+                <span className="text-sm font-black text-foreground leading-none">{formatNumber(stats.totalLikes)}</span>
+              </div>
             </div>
           </div>
         </div>
