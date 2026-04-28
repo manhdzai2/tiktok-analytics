@@ -74,72 +74,96 @@ class TikTokScraperService
 
     protected function scrapeWithRapidAPI($url)
     {
-        $apiKey = env('RAPIDAPI_KEY');
+        $rawKeys = env('RAPIDAPI_KEY', '');
+        $apiKeys = array_filter(array_map('trim', explode(',', $rawKeys)));
         $apiHost = env('RAPIDAPI_HOST', 'tiktok-api23.p.rapidapi.com');
-        if (!$apiKey) return null;
+        
+        if (empty($apiKeys)) {
+            Log::warning("No RapidAPI keys configured.");
+            return null;
+        }
 
         $username = str_replace(['https://www.tiktok.com/@', '@'], '', parse_url($url, PHP_URL_PATH));
         $username = trim($username, '/');
 
-        try {
-            Log::info("Starting RapidAPI scrape for: {$username}");
-            $response = $this->client->get("https://{$apiHost}/api/user/info?uniqueId={$username}", [
-                'headers' => [
-                    'X-RapidAPI-Key' => $apiKey,
-                    'X-RapidAPI-Host' => $apiHost
-                ],
-                'timeout' => 30.0
-            ]);
-            
-            $body = $response->getBody()->getContents();
-            Log::info("RapidAPI Response: " . substr($body, 0, 500));
-            $userData = json_decode($body, true);
-            
-            // Xử lý các cấu trúc JSON khác nhau của API
-            $userInfo = $userData['data'] ?? $userData['userInfo'] ?? $userData ?? null;
-            if (!$userInfo || (!isset($userInfo['user']) && !isset($userInfo['uniqueId']))) {
-                Log::error("RapidAPI: Could not find user info in response.");
-                return null;
+        foreach ($apiKeys as $apiKey) {
+            // Kiểm tra xem Key này có đang bị đánh dấu là hết lượt (cached) không
+            if (\Illuminate\Support\Facades\Cache::has("rapidapi_exhausted_" . md5($apiKey))) {
+                continue;
             }
-            
-            // Nếu data phẳng, bọc lại
-            if (!isset($userInfo['user']) && isset($userInfo['uniqueId'])) {
-                $userInfo = ['user' => $userInfo, 'stats' => $userData['stats'] ?? $userData['data']['stats'] ?? []];
-            }
-            
-            $secUid = $userInfo['user']['secUid'] ?? 
-                      $userInfo['user']['sec_uid'] ?? 
-                      $userData['data']['user']['secUid'] ?? 
-                      $userData['data']['user']['sec_uid'] ?? 
-                      $userData['secUid'] ?? null;
-            
-            Log::info("RapidAPI: Detected secUid: " . ($secUid ?? 'NULL'));
 
-            // 2. Lấy danh sách video (nếu có secUid)
-            $videos = [];
-            if ($secUid) {
-                $postResponse = $this->client->get("https://{$apiHost}/api/user/posts?secUid={$secUid}&count=35&cursor=0", [
+            try {
+                Log::info("Attempting scrape with API Key: " . substr($apiKey, 0, 10) . "...");
+                
+                $response = $this->client->get("https://{$apiHost}/api/user/info?uniqueId={$username}", [
                     'headers' => [
                         'X-RapidAPI-Key' => $apiKey,
                         'X-RapidAPI-Host' => $apiHost
                     ],
                     'timeout' => 30.0
                 ]);
-                $postData = json_decode($postResponse->getBody(), true);
-                $videos = $postData['data']['itemList'] ?? $postData['itemList'] ?? $postData['aweme_list'] ?? $postData['data']['videos'] ?? $postData['videos'] ?? [];
-                Log::info("RapidAPI: Fetched " . count($videos) . " videos.");
-            }
+                
+                $body = $response->getBody()->getContents();
+                $userData = json_decode($body, true);
+                
+                $userInfo = $userData['data'] ?? $userData['userInfo'] ?? $userData ?? null;
+                if (!$userInfo || (!isset($userInfo['user']) && !isset($userInfo['uniqueId']))) {
+                    Log::error("RapidAPI: Could not find user info with key " . substr($apiKey, 0, 5));
+                    continue; // Thử Key tiếp theo nếu dữ liệu trả về rỗng
+                }
+                
+                if (!isset($userInfo['user']) && isset($userInfo['uniqueId'])) {
+                    $userInfo = ['user' => $userInfo, 'stats' => $userData['stats'] ?? $userData['data']['stats'] ?? []];
+                }
+                
+                $secUid = $userInfo['user']['secUid'] ?? 
+                          $userInfo['user']['sec_uid'] ?? 
+                          $userData['data']['user']['secUid'] ?? 
+                          $userData['data']['user']['sec_uid'] ?? 
+                          $userData['secUid'] ?? null;
 
-            return [
-                'userInfo' => $userInfo,
-                'itemList' => $videos,
-                'domVideos' => $videos
-            ];
-            
-        } catch (\Exception $e) {
-            Log::error("RapidAPI Exception: " . $e->getMessage());
-            return null;
+                $videos = [];
+                if ($secUid) {
+                    try {
+                        $postResponse = $this->client->get("https://{$apiHost}/api/user/posts?secUid={$secUid}&count=35&cursor=0", [
+                            'headers' => [
+                                'X-RapidAPI-Key' => $apiKey,
+                                'X-RapidAPI-Host' => $apiHost
+                            ],
+                            'timeout' => 30.0
+                        ]);
+                        $postData = json_decode($postResponse->getBody(), true);
+                        $videos = $postData['data']['itemList'] ?? $postData['itemList'] ?? $postData['aweme_list'] ?? $postData['data']['videos'] ?? $postData['videos'] ?? [];
+                    } catch (\Exception $vE) {
+                        Log::warning("Failed to fetch videos with key " . substr($apiKey, 0, 5) . ": " . $vE->getMessage());
+                    }
+                }
+
+                // Nếu chạy đến đây thành công thì trả về dữ liệu luôn
+                return [
+                    'userInfo' => $userInfo,
+                    'itemList' => $videos,
+                    'domVideos' => $videos
+                ];
+                
+            } catch (\GuzzleHttp\Exception\ClientException $e) {
+                $statusCode = $e->getResponse()->getStatusCode();
+                if ($statusCode == 429) {
+                    Log::warning("RapidAPI Key Exhausted (429): " . substr($apiKey, 0, 10));
+                    // Đánh dấu Key này hết lượt trong 1 giờ
+                    \Illuminate\Support\Facades\Cache::put("rapidapi_exhausted_" . md5($apiKey), true, 3600);
+                    continue; // Thử Key tiếp theo
+                }
+                Log::error("RapidAPI Client Error (" . $statusCode . "): " . $e->getMessage());
+                continue;
+            } catch (\Exception $e) {
+                Log::error("RapidAPI General Error: " . $e->getMessage());
+                continue;
+            }
         }
+
+        Log::error("All RapidAPI keys exhausted or failed.");
+        return null;
     }
 
     protected function scrapeWithOembed($url)
