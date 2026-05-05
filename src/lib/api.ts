@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://tiktok-analytics-production-3c5c.up.railway.app/api';
+// Đổi từ link Railway cũ sang link này:
+const API_BASE_URL = '/api';
+
 
 const api = axios.create({
   baseURL: API_BASE_URL,
