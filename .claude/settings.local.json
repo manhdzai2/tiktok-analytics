@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php artisan *)",
+      "Bash(php -l app/Services/TikTokScraperService.php)",
+      "Bash(php -l app/Jobs/ProcessTikTokImport.php)",
+      "Bash(php -l app/Jobs/ScrapeTikTokProfile.php)",
+      "Bash(php -l app/Jobs/FinalizeImport.php)",
+      "Bash(php -l app/Models/ImportTask.php)",
+      "Bash(npx tsc *)",
+      "Bash(curl -s \"http://localhost:8000/api/check-version\")",
+      "Bash(curl -s -X POST \"http://localhost:8000/api/import-tiktok\" -H \"Content-Type: application/json\" -d \"{\\\\\"url\\\\\": \\\\\"@tiktok\\\\\"}\")",
+      "Bash(php -l app/Http/Controllers/ChannelController.php)",
+      "Bash(Get-Date -Format 'yyyy-MM-dd')",
+      "Bash(powershell -Command \"Get-Content storage/logs/laravel-$\\(Get-Date -Format 'yyyy-MM-dd'\\).log -Tail 50\")",
+      "Bash(where node *)",
+      "Bash(curl -s -X POST \"http://localhost:8000/api/import-tiktok\" -H \"Content-Type: application/json\" -d \"{\\\\\"url\\\\\": \\\\\"@charlidamelio\\\\\"}\")",
+      "Bash(timeout 60 node scraper-tool/scrape.js \"https://www.tiktok.com/@charlidamelio\")"
+    ]
+  }
+}

@@ -3,15 +3,16 @@
 namespace App\Services;
 
 use GuzzleHttp\Client;
-use Symfony\Component\DomCrawler\Crawler;
 use App\Models\Channel;
 use App\Models\Video;
 use App\Models\DailyGrowth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class TikTokScraperService
 {
     protected $client;
+    protected $cacheTtl = 3600; // Cache kết quả 1 giờ
 
     public function __construct()
     {
@@ -26,75 +27,144 @@ class TikTokScraperService
         ]);
     }
 
+    /**
+     * Lấy danh sách API hosts từ env, fallback về danh sách mặc định
+     */
+    protected function getApiHosts(): array
+    {
+        $rawHosts = env('RAPIDAPI_HOSTS', 'tiktok-api23.p.rapidapi.com');
+        $hosts = array_filter(array_map('trim', explode(',', $rawHosts)));
+        return !empty($hosts) ? $hosts : ['tiktok-api23.p.rapidapi.com'];
+    }
+
+    /**
+     * Chuẩn hóa URL và trích xuất handle
+     */
+    protected function normalizeUrl(string $url): array
+    {
+        if (!str_starts_with($url, 'http')) {
+            $url = trim($url);
+            if (!str_starts_with($url, '@')) {
+                $url = '@' . $url;
+            }
+            $url = 'https://www.tiktok.com/' . $url;
+        }
+
+        $path = parse_url($url, PHP_URL_PATH);
+        $handle = '@' . ltrim($path, '/@');
+        $username = ltrim($path, '/@');
+
+        return [$url, $handle, $username];
+    }
+
     public function scrapeFromUrl(string $url)
     {
         try {
-            // Chuẩn hóa: Nếu chỉ nhập ID (@abc hoặc abc) thay vì URL
-            if (!str_starts_with($url, 'http')) {
-                $url = trim($url);
-                if (!str_starts_with($url, '@')) {
-                    $url = '@' . $url;
-                }
-                $url = 'https://www.tiktok.com/' . $url;
+            [$url, $handle, $username] = $this->normalizeUrl($url);
+
+            // Kiểm tra cache trước
+            $cacheKey = "tiktok_profile_" . md5($handle);
+            $cached = Cache::get($cacheKey);
+            if ($cached) {
+                Log::info("Cache hit for handle: {$handle}");
+                return $cached;
             }
 
-            // 1. Ưu tiên sử dụng RapidAPI nếu có cấu hình
-            $apiData = $this->scrapeWithRapidAPI($url);
-            if ($apiData) {
-                return $this->parseProfile($apiData, $url, $apiData['domVideos'] ?? []);
-            }
-
-            // 2. Fallback về Puppeteer cũ nếu API lỗi hoặc chưa cấu hình
+            // 1. Ưu tiên dùng PUPPETEER (vì RapidAPI đang bị 403 hết)
+            Log::info("Trying Puppeteer first for: {$url}");
             $scriptContent = $this->scrapeWithPuppeteer($url);
-            if (!$scriptContent) {
-                return $this->scrapeWithOembed($url);
+            if ($scriptContent) {
+                $result = $this->parsePuppeteerOutput($scriptContent, $url);
+                if ($result) {
+                    Log::info("Puppeteer success for: {$url}");
+                    Cache::put($cacheKey, $result, $this->cacheTtl);
+                    return $result;
+                } else {
+                    Log::warning("Puppeteer returned data but parse failed for: {$url}");
+                }
+            } else {
+                Log::warning("Puppeteer returned null for: {$url}");
             }
 
-            $scrapedData = json_decode($scriptContent, true);
-            if (!$scrapedData) {
-                $jsonString = $this->cleanJsonOutput($scriptContent);
-                $scrapedData = json_decode($jsonString, true);
+            // 2. Fallback: RapidAPI nếu có cấu hình
+            Log::info("Puppeteer failed, trying RapidAPI for: {$username}");
+            $apiData = $this->scrapeWithRapidAPI($username);
+
+            if ($apiData && isset($apiData['user_not_found']) && $apiData['user_not_found']) {
+                Log::warning("User not found (404/NOT_FOUND): {$username} - skipping further fallbacks");
+                return null;
             }
 
-            if (!$scrapedData) return $this->scrapeWithOembed($url);
-
-            $hydration = isset($scrapedData['hydration']) ? json_decode($scrapedData['hydration'], true) : null;
-            $domVideos = $scrapedData['domVideos'] ?? [];
-
-            if (str_contains($url, '/@')) {
-                return $this->parseProfile($hydration ?? $scrapedData, $url, $domVideos);
+            if ($apiData) {
+                $result = $this->parseProfile($apiData, $url, $apiData['domVideos'] ?? []);
+                if ($result) {
+                    Cache::put($cacheKey, $result, $this->cacheTtl);
+                }
+                return $result;
             }
-            
-            return null;
+
+            // 3. Fallback: Public TikTok web scrape
+            Log::info("RapidAPI failed, trying public web scrape for: {$url}");
+            $webData = $this->scrapePublicWeb($url);
+            if ($webData) {
+                Log::info("Public web scrape returned data, trying to parse profile");
+                $result = $this->parseProfile($webData, $url, []);
+                if ($result) {
+                    Log::info("Public web scrape successful for: {$url}");
+                    Cache::put($cacheKey, $result, $this->cacheTtl);
+                    return $result;
+                } else {
+                    Log::warning("Public web scrape data could not be parsed for: {$url}");
+                }
+            }
+
+            // 4. Cuối cùng: oEmbed
+            Log::warning("All methods failed for: {$url}, trying oEmbed as last resort");
+            return $this->scrapeWithOembed($url);
+
         } catch (\Exception $e) {
-            Log::error("Scraper Exception: " . $e->getMessage());
+            Log::error("Scraper Exception for {$url}: " . $e->getMessage());
             return $this->scrapeWithOembed($url);
         }
     }
 
-    protected function scrapeWithRapidAPI($url)
+    /**
+     * Thử tất cả tổ hợp (key, host) - xoay vòng thông minh
+     */
+    protected function scrapeWithRapidAPI(string $username)
     {
         $rawKeys = env('RAPIDAPI_KEY', '');
         $apiKeys = array_filter(array_map('trim', explode(',', $rawKeys)));
-        $apiHost = env('RAPIDAPI_HOST', 'tiktok-api23.p.rapidapi.com');
-        
+        $apiHosts = $this->getApiHosts();
+
         if (empty($apiKeys)) {
             Log::warning("No RapidAPI keys configured.");
             return null;
         }
 
-        $username = str_replace(['https://www.tiktok.com/@', '@'], '', parse_url($url, PHP_URL_PATH));
-        $username = trim($username, '/');
+        // Tạo tất cả tổ hợp (key, host)
+        $combinations = [];
+        foreach ($apiKeys as $key) {
+            foreach ($apiHosts as $host) {
+                $combinations[] = ['key' => $key, 'host' => $host];
+            }
+        }
 
-        foreach ($apiKeys as $apiKey) {
-            // Kiểm tra xem Key này có đang bị đánh dấu là hết lượt (cached) không
-            if (\Illuminate\Support\Facades\Cache::has("rapidapi_exhausted_" . md5($apiKey))) {
-                continue;
+        // Xáo trộn để tránh luôn bắt đầu từ tổ hợp đầu
+        shuffle($combinations);
+
+        foreach ($combinations as $combo) {
+            $apiKey = $combo['key'];
+            $apiHost = $combo['host'];
+            $cacheKey = "rapidapi_exhausted_" . md5($apiKey . '_' . $apiHost);
+
+            if (Cache::has($cacheKey)) {
+                continue; // Host+Key này đang bị exhausted
             }
 
             try {
-                Log::info("Attempting scrape with API Key: " . substr($apiKey, 0, 10) . "...");
-                
+                Log::info("Trying API: " . substr($apiKey, 0, 10) . " @ {$apiHost}");
+
                 $response = $this->client->get("https://{$apiHost}/api/user/info?uniqueId={$username}", [
                     'headers' => [
                         'X-RapidAPI-Key' => $apiKey,
@@ -102,25 +172,26 @@ class TikTokScraperService
                     ],
                     'timeout' => 30.0
                 ]);
-                
+
                 $body = $response->getBody()->getContents();
                 $userData = json_decode($body, true);
-                
+
                 $userInfo = $userData['data'] ?? $userData['userInfo'] ?? $userData ?? null;
                 if (!$userInfo || (!isset($userInfo['user']) && !isset($userInfo['uniqueId']))) {
-                    Log::error("RapidAPI: Could not find user info with key " . substr($apiKey, 0, 5));
-                    continue; // Thử Key tiếp theo nếu dữ liệu trả về rỗng
+                    Log::warning("No user info from {$apiHost} with key " . substr($apiKey, 0, 5));
+                    continue;
                 }
-                
+
                 if (!isset($userInfo['user']) && isset($userInfo['uniqueId'])) {
                     $userInfo = ['user' => $userInfo, 'stats' => $userData['stats'] ?? $userData['data']['stats'] ?? []];
                 }
-                
-                $secUid = $userInfo['user']['secUid'] ?? 
-                          $userInfo['user']['sec_uid'] ?? 
-                          $userData['data']['user']['secUid'] ?? 
-                          $userData['data']['user']['sec_uid'] ?? 
-                          $userData['secUid'] ?? null;
+
+                $secUid = $userInfo['user']['secUid']
+                    ?? $userInfo['user']['sec_uid']
+                    ?? $userData['data']['user']['secUid']
+                    ?? $userData['data']['user']['sec_uid']
+                    ?? $userData['secUid']
+                    ?? null;
 
                 $videos = [];
                 if ($secUid) {
@@ -133,50 +204,114 @@ class TikTokScraperService
                             'timeout' => 30.0
                         ]);
                         $postData = json_decode($postResponse->getBody(), true);
-                        $videos = $postData['data']['itemList'] ?? $postData['itemList'] ?? $postData['aweme_list'] ?? $postData['data']['videos'] ?? $postData['videos'] ?? [];
+                        $videos = $postData['data']['itemList']
+                            ?? $postData['itemList']
+                            ?? $postData['aweme_list']
+                            ?? $postData['data']['videos']
+                            ?? $postData['videos']
+                            ?? [];
                     } catch (\Exception $vE) {
-                        Log::warning("Failed to fetch videos with key " . substr($apiKey, 0, 5) . ": " . $vE->getMessage());
+                        Log::warning("Video fetch failed @ {$apiHost}: " . $vE->getMessage());
                     }
                 }
 
-                // Nếu chạy đến đây thành công thì trả về dữ liệu luôn
+                Log::info("RapidAPI success with {$apiHost}");
                 return [
                     'userInfo' => $userInfo,
                     'itemList' => $videos,
                     'domVideos' => $videos
                 ];
-                
+
             } catch (\GuzzleHttp\Exception\ClientException $e) {
                 $statusCode = $e->getResponse()->getStatusCode();
+                $responseBody = (string) $e->getResponse()->getBody();
+                $errorData = json_decode($responseBody, true);
+
                 if ($statusCode == 429) {
-                    Log::warning("RapidAPI Key Exhausted (429): " . substr($apiKey, 0, 10));
-                    // Đánh dấu Key này hết lượt trong 1 giờ
-                    \Illuminate\Support\Facades\Cache::put("rapidapi_exhausted_" . md5($apiKey), true, 3600);
-                    continue; // Thử Key tiếp theo
+                    // Cache exhausted trong 2 giờ (key + host cụ thể)
+                    Cache::put($cacheKey, true, 7200);
+                    Log::warning("RapidAPI exhausted (429): " . substr($apiKey, 0, 10) . " @ {$apiHost}");
+                    continue;
                 }
-                Log::error("RapidAPI Client Error (" . $statusCode . "): " . $e->getMessage());
+
+                if ($statusCode == 403 && $errorData && isset($errorData['message']) && stripos($errorData['message'], 'not subscribed') !== false) {
+                    // Host này key không đăng ký - bỏ qua host này hoàn toàn
+                    $hostCacheKey = "rapidapi_host_unavailable_" . md5($apiHost);
+                    Cache::put($hostCacheKey, true, 86400); // Đánh dấu host không dùng được trong 24h
+                    Log::warning("RapidAPI host unavailable (403): {$apiHost} - not subscribed");
+                    break; // Thoát khỏi vòng lặp key, chuyển sang host tiếp theo
+                }
+
+                if ($statusCode == 404 || ($errorData && (stripos(json_encode($errorData), 'not_found') !== false || stripos(json_encode($errorData), 'NOT_FOUND') !== false))) {
+                    Log::warning("RapidAPI: User not found (404/NOT_FOUND) for {$username} @ {$apiHost}");
+                    // User không tồn tại - không thử tiếp các key khác
+                    return ['user_not_found' => true, 'username' => $username];
+                }
+
+                Log::error("RapidAPI Client Error ({$statusCode}): " . $e->getMessage());
                 continue;
             } catch (\Exception $e) {
-                Log::error("RapidAPI General Error: " . $e->getMessage());
+                Log::error("RapidAPI General Error @ {$apiHost}: " . $e->getMessage());
                 continue;
             }
         }
 
-        Log::error("All RapidAPI keys exhausted or failed.");
+        Log::error("All RapidAPI keys and hosts exhausted.");
         return null;
+    }
+
+    /**
+     * Scrape công khai từ TikTok web (không cần API key)
+     */
+    protected function scrapePublicWeb(string $url)
+    {
+        try {
+            Log::info("Trying public web scrape for: {$url}");
+
+            $response = $this->client->get($url, [
+                'timeout' => 15.0,
+                'headers' => [
+                    'Accept' => 'text/html,application/xhtml+xml',
+                    'Accept-Language' => 'en-US,en;q=0.9',
+                ]
+            ]);
+
+            $html = (string) $response->getBody();
+
+            // Tìm JSON data từ __UNIVERSAL_DATA_FOR_REHYDRATION__
+            if (preg_match('/id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)<\/script>/s', $html, $matches)) {
+                $json = json_decode($matches[1], true);
+                if ($json) {
+                    return $json;
+                }
+            }
+
+            // Fallback: tìm script chứa JSON data
+            if (preg_match('/<script[^>]*>\s*(window\.__INIT_PROPS__|window\.__INITIAL_STATE__)\s*=\s*({.*?})\s*<\/script>/s', $html, $matches)) {
+                $json = json_decode($matches[2], true);
+                if ($json) {
+                    return $json;
+                }
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            Log::warning("Public web scrape failed: " . $e->getMessage());
+            return null;
+        }
     }
 
     protected function scrapeWithOembed($url)
     {
         try {
             $oembedUrl = "https://www.tiktok.com/oembed?url=" . urlencode($url);
-            $response = $this->client->get($oembedUrl);
+            $response = $this->client->get($oembedUrl, ['timeout' => 10.0]);
             $data = json_decode($response->getBody(), true);
             if (!$data) return null;
 
             $handle = '@' . ($data['embed_product_id'] ?? explode('@', explode('?', $url)[0])[1] ?? 'unknown');
             $channel = Channel::where('handle', $handle)->first();
-            
+
             return Channel::updateOrCreate(
                 ['handle' => $handle],
                 [
@@ -196,6 +331,29 @@ class TikTokScraperService
         $scriptPath = base_path('scraper-tool/scrape.js');
         $command = "node \"$scriptPath\" \"$url\" 2>&1";
         return shell_exec($command);
+    }
+
+    /**
+     * Parse output từ Puppeteer script
+     */
+    protected function parsePuppeteerOutput($scriptContent, $url)
+    {
+        $scrapedData = json_decode($scriptContent, true);
+        if (!$scrapedData) {
+            $jsonString = $this->cleanJsonOutput($scriptContent);
+            $scrapedData = json_decode($jsonString, true);
+        }
+
+        if (!$scrapedData) return null;
+
+        $hydration = isset($scrapedData['hydration']) ? json_decode($scrapedData['hydration'], true) : null;
+        $domVideos = $scrapedData['domVideos'] ?? [];
+
+        if (str_contains($url, '/@')) {
+            return $this->parseProfile($hydration ?? $scrapedData, $url, $domVideos);
+        }
+
+        return null;
     }
 
     protected function cleanJsonOutput($output)

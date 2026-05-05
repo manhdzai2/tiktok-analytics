@@ -62,12 +62,30 @@ class ChannelController extends Controller
 
         $result = $this->scraper->scrapeFromUrl($request->url);
 
+        // Kiểm tra kết quả trả về
         if (!$result) {
             return response()->json(['message' => 'Could not fetch data from TikTok.'], 400);
         }
 
-        $id = ($result instanceof Channel) ? $result->id : $result->channel_id;
+        // Xử lý trường hợp user không tồn tại (trả về mảng)
+        if (is_array($result) && isset($result['user_not_found']) && $result['user_not_found']) {
+            return response()->json(['message' => 'User not found on TikTok. Please check the username/URL.'], 404);
+        }
+
+        // Lấy ID từ kết quả
+        if ($result instanceof Channel) {
+            $id = $result->id;
+        } elseif (is_array($result) && isset($result['id'])) {
+            $id = $result['id'];
+        } else {
+            return response()->json(['message' => 'Invalid data returned from scraper.'], 500);
+        }
+
         $channel = Channel::with(['dailyGrowths', 'videos'])->find($id);
+
+        if (!$channel) {
+            return response()->json(['message' => 'Failed to save channel data.'], 500);
+        }
 
         return response()->json([
             'message' => 'Import successful',

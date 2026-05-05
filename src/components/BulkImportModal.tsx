@@ -111,7 +111,14 @@ export function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImportModalP
             <FileText className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-bold text-foreground">Bulk Import (Excel/CSV)</h2>
           </div>
-          <button onClick={onClose} className="rounded-full p-2 hover:bg-secondary/20 transition-colors">
+          <button
+            onClick={onClose}
+            disabled={isPolling}
+            className={cn(
+              "rounded-full p-2 transition-colors",
+              isPolling ? "opacity-50 cursor-not-allowed" : "hover:bg-secondary/20"
+            )}
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -164,7 +171,16 @@ export function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImportModalP
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-bold text-foreground">
-                    {status?.status === 'completed' ? 'Import Complete' : (status?.status === 'failed' ? 'Import Failed' : 'Processing...')}
+                    {status?.status === 'completed' ? 'Import Complete' : (status?.status === 'failed' ? 'Import Failed' : (
+                      <>
+                        Processing...
+                        {status?.chunk_total > 0 && (
+                          <span className="ml-2 text-muted-foreground font-normal">
+                            (Chunk {status.chunk_processed}/{status.chunk_total})
+                          </span>
+                        )}
+                      </>
+                    ))}
                   </span>
                   <span className="text-sm font-bold text-primary">{Math.round(progress)}%</span>
                 </div>
@@ -205,15 +221,36 @@ export function BulkImportModal({ isOpen, onClose, onSuccess }: BulkImportModalP
               )}
 
               {(status?.status === 'completed' || status?.status === 'failed') && (
-                <button
-                  onClick={onClose}
-                  className={cn(
-                    "w-full rounded-2xl py-3.5 text-sm font-bold text-white shadow-xl transition-all hover:scale-[1.02] active:scale-95",
-                    status?.status === 'failed' ? "bg-destructive shadow-destructive/20 hover:bg-destructive/90" : "bg-primary shadow-primary/20 hover:bg-primary/90"
+                <div className="space-y-3">
+                  {status?.error_count > 0 && status?.errors_log && (
+                    <button
+                      onClick={() => {
+                        const errorText = status.errors_log.join('\n');
+                        const blob = new Blob([errorText], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `import_errors_${importId}.txt`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-destructive/10 py-3 text-sm font-bold text-destructive hover:bg-destructive/20 transition-all"
+                    >
+                      <FileText className="h-4 w-4" />
+                      Download Error Log ({status.error_count} errors)
+                    </button>
                   )}
-                >
-                  Done
-                </button>
+
+                  <button
+                    onClick={onClose}
+                    className={cn(
+                      "w-full rounded-2xl py-3.5 text-sm font-bold text-white shadow-xl transition-all hover:scale-[1.02] active:scale-95",
+                      status?.status === 'failed' ? "bg-destructive shadow-destructive/20 hover:bg-destructive/90" : "bg-primary shadow-primary/20 hover:bg-primary/90"
+                    )}
+                  >
+                    Done
+                  </button>
+                </div>
               )}
             </div>
           )}
